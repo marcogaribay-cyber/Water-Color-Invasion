@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Watercolor Invasion</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #fdfaf0; /* Paper texture color */
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            pointer-events: none;
+        }
+        .stat { font-size: 20px; font-weight: bold; color: #444; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div class="stat">SCORE: <span id="score">0</span></div>
+    <div class="stat">HIGH SCORE: <span id="highScore">0</span></div>
+    <div class="stat">HEARTS: <span id="lives">♥♥♥</span></div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const highScoreEl = document.getElementById('highScore');
+const livesEl = document.getElementById('lives');
+
+// Game State
+let score = 0;
+let highScore = localStorage.getItem('alienHighScore') || 0;
+let lives = 3;
+let gameOver = false;
+let enemies = [];
+let particles = [];
+let lastSpawn = 0;
+let spawnRate = 1500; // Starts at 1.5 seconds
+
+highScoreEl.innerText = highScore;
+
+// Resize Canvas
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+class Enemy {
+    constructor(isBoss = false) {
+        this.isBoss = isBoss;
+        this.radius = isBoss ? 60 : 25;
+        this.x = Math.random() * (canvas.width - this.radius * 2) + this.radius;
+        this.y = canvas.height + this.radius;
+        this.speed = isBoss ? 0.5 : (1 + Math.random() * 2 + (score / 5000));
+        this.hp = isBoss ? 10 : 1;
+        this.color = isBoss ? 'rgba(255, 50, 50, 0.6)' : 'rgba(100, 200, 100, 0.6)';
+        this.amplitude = Math.random() * 2; // Zig-zag
+    }
+
+    update() {
+        this.y -= this.speed;
+        this.x += Math.sin(this.y / 20) * this.amplitude;
+        
+        // If enemy escapes the top
+        if (this.y < -this.radius) {
+            if (!this.isBoss) loseLife();
+            return false;
+        }
+        return true;
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        // Saucer Body (Watercolor Wash)
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, this.radius, this.radius / 2.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Saucer Dome
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.beginPath();
+        ctx.arc(0, -5, this.radius / 2, Math.PI, 0);
+        ctx.fill();
+
+        // Outline (Pencil look)
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.restore();
+    }
+}
+
+function loseLife() {
+    lives--;
+    livesEl.innerText = "♥".repeat(lives);
+    if (lives <= 0) {
+        gameOver = true;
+        if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('alienHighScore', highScore);
+        }
+        alert("GAME OVER! Your score: " + score + "\nHigh Score: " + highScore);
+        location.reload();
+    }
+}
+
+// Click to Shoot
+window.addEventListener('mousedown', (e) => {
+    if (gameOver) return;
+
+    let hitSomething = false;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const en = enemies[i];
+        const dist = Math.hypot(e.clientX - en.x, e.clientY - en.y);
+        
+        if (dist < en.radius + 10) {
+            en.hp--;
+            hitSomething = true;
+            if (en.hp <= 0) {
+                score += en.isBoss ? 1000 : 100;
+                scoreEl.innerText = score;
+                enemies.splice(i, 1);
+            }
+            break;
+        }
+    }
+});
+
+function spawnLogic(time) {
+    if (time - lastSpawn > spawnRate) {
+        // Boss logic: Spawn Mother Ship every 5000 points
+        const bossExists = enemies.some(e => e.isBoss);
+        if (score > 0 && score % 5000 === 0 && !bossExists) {
+            enemies.push(new Enemy(true));
+        } else {
+            enemies.push(new Enemy());
+        }
+        
+        lastSpawn = time;
+        // Increase difficulty over time
+        spawnRate = Math.max(400, 1500 - (score / 50));
+    }
+}
+
+function animate(time) {
+    if (gameOver) return;
+    
+    // Clear with slight alpha for "motion blur" feel
+    ctx.fillStyle = '#fdfaf0';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw "Ground" craters (Static Watercolor)
+    ctx.fillStyle = 'rgba(200, 200, 200, 0.3)';
+    ctx.beginPath();
+    ctx.arc(100, canvas.height, 80, 0, Math.PI, true);
+    ctx.arc(canvas.width - 200, canvas.height, 120, 0, Math.PI, true);
+    ctx.fill();
+
+    spawnLogic(time);
+
+    enemies = enemies.filter(en => {
+        const active = en.update();
+        if (active) en.draw();
+        return active;
+    });
+
+    requestAnimationFrame(animate);
+}
+
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
+
+
+
+
